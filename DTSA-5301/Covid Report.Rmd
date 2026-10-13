@@ -1,0 +1,273 @@
+---
+title: "COVID Report"
+author: "Kevin Park"
+date: "2026-10-01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(zoo)
+```
+
+Libraries used: tidyverse, ggplot2, lubridate, readr, zoo
+
+## Data Import
+
+The first step in the project is to import the data. This step is a reproduction of what was presented in lecture.
+
+```{r data_import, echo=TRUE}
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+
+file_names <- c("time_series_covid19_confirmed_US.csv",
+                "time_series_covid19_deaths_US.csv",
+                "time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_global.csv")
+
+urls <- str_c(url_in, file_names)
+
+US_cases <- read_csv(urls[1], show_col_types = FALSE)
+US_deaths <- read_csv(urls[2], show_col_types = FALSE)
+global_cases <- read_csv(urls[3], show_col_types = FALSE)
+global_deaths <- read_csv(urls[4], show_col_types = FALSE)
+
+```
+
+```{r}
+global_cases
+```
+
+## Data Tidying & Transforming
+
+After importing the data and verifying that the tables have loaded successfully, the next step is to tidy the data and verify that the data is plausible. We also transform the data into a clean, easy-to-use format for further analysis and visualization. Again, these steps are repeated from the lecture.
+
+```{r data_tidying_global, echo=TRUE}
+global_deaths <- global_deaths %>%
+  pivot_longer(cols = -c('Province/State',
+                         'Country/Region',
+                         Lat, Long),
+               names_to = "date",
+               values_to = "deaths") %>%
+  select(-c(Lat, Long))
+
+global_cases <- global_cases %>%
+  pivot_longer(cols = -c('Province/State',
+                         'Country/Region',
+                         Lat, Long),
+               names_to = "date",
+               values_to = "cases") %>%
+  select(-c(Lat, Long))
+
+global <- global_cases %>%
+  full_join(global_deaths) %>%
+  rename(Country_Region = 'Country/Region',
+         Province_State = 'Province/State') %>%
+  mutate(date=mdy(date))
+```
+
+```{r}
+global
+```
+
+```{r}
+summary(global)
+```
+
+```{r}
+global %>% filter(cases > 28000000)
+```
+
+```{r data_tidying_us, echo=TRUE}
+US_cases <- US_cases %>%
+  pivot_longer(cols = -c(UID:Combined_Key),
+               names_to =  "date",
+               values_to = "cases") %>%
+  select(Admin2:cases) %>%
+  mutate(date=mdy(date)) %>%
+  select(-c(Lat, Long_))
+
+US_deaths <- US_deaths %>%
+  pivot_longer(cols = -(UID:Population),
+               names_to = "date",
+               values_to = "deaths") %>%
+  select(Admin2:deaths) %>%
+  mutate(date=mdy(date)) %>%
+  select(-c(Lat, Long_))
+
+US <- US_cases %>%
+  full_join(US_deaths)
+```
+
+```{r}
+US
+```
+
+```{r}
+summary(US)
+```
+
+## Data Visualizations and Analyses
+
+### Visualization 1
+
+For the first visualization of the project, I want to take a look at the mortality rates over time and analyze the results for the global data vs. the US data. The goal is to try to determine any noticeable differences and similarities between the two datasets and draw meaningful insights from them.
+
+```{r data_visualization, echo=TRUE}
+daily_mortality_rate_global <- global %>%
+  filter(cases > 0, Country_Region != "US") %>%
+  group_by(date) %>%
+  summarize(
+    daily_cases = sum(cases),
+    daily_deaths = sum(deaths),
+  ) %>%
+  mutate(
+    mortality_rate = round(daily_deaths/daily_cases, 3)
+  )
+
+monthly_plot = daily_mortality_rate_global %>%
+  filter(day(date) == 1)
+
+daily_mortality_rate_US <- US %>%
+  filter(cases > 0) %>%
+  group_by(date) %>%
+  summarize(
+    daily_cases = sum(cases),
+    daily_deaths = sum(deaths),
+  ) %>%
+  mutate(
+    mortality_rate = round(daily_deaths/daily_cases, 3)
+  )
+
+monthly_plot_US <- daily_mortality_rate_US %>%
+  filter(day(date) == 1)
+
+ggplot() + 
+  geom_line(data = monthly_plot,
+            aes(x = date, y = mortality_rate, color = "Source 1")
+            ) + 
+  geom_line(data = monthly_plot_US,
+            aes(x = date, y = mortality_rate, color="Source 2")
+            ) + 
+  labs(x = "Date",
+       y = "Mortality Rate"
+  ) + 
+  scale_color_manual(
+    name = "Global vs. US",
+    values = c("Source 1" = "blue",
+               "Source 2" = "red"
+               ),
+    labels = c("Source 1" = "Global",
+               "Source 2" = "US")
+  ) + 
+  labs(title = "Mortality Rate Over Time", y="Rate", x = "Date")
+```
+
+Note: I chose to only plot the rolling values as of the first of the month, as the marginal changes in counts and deaths compared to the large overall numbers caused the rate to update only periodically. This daily view caused a step-like view on the visualization and thus I shifted to a monthly visualization to smooth out the plot. I also removed US from the global dataset to do a pure comparison of global vs US values.
+
+As we can see in the visualization, the US follows the global trend fairly closely with the mortality rate spiking in mid-2020 then tapering off and slowly declining over time. A plausible explanation would be that the US was no exception towards the global exposure to COVID and was susceptible to the same outcomes as the rest of the world. We can also see that the overall mortality rate was lower in general for the US vs. globally. This could be caused by several potential phenomena. One potential reason could be that the US may have more advanced medical technology than the global average, thus being more apt in reducing the mortality rate. Another potential reason could be the method reporting cases/deaths. Perhaps the US had more avenues to report a positive COVID test, regardless of severity whereas other counties around the globe may only report serious cases, which have a higher likelihood of death. These potential explanations would require further investigation out of the context of this course to ensure that these assumptions are justified and are ethically sound.
+
+### Visualization 2
+
+For the second visualization, I wanted to identify the countries with the highest peak mortality rates recorded. For the sake of achieving a sufficient sample size, I only accounted for rates once the number of cases reached at least 100.
+
+```{r}
+global_rate <- global %>%
+  filter(cases >= 100) %>%
+  mutate(mortality_rate = round(deaths/cases, 3))
+
+country_max <- global_rate %>%
+  group_by(Country_Region) %>%
+  summarize(mortality_rate = max(mortality_rate)) %>%
+  arrange(desc(mortality_rate))
+
+ggplot(
+  data = country_max %>% slice_head(n=20),
+  aes(x = reorder(Country_Region, mortality_rate), y=mortality_rate, fill=Country_Region)
+) +
+  geom_col() + 
+  geom_text(
+    aes(label=mortality_rate),
+    hjust = 1.1
+  ) + 
+  labs(title = "Highest Peak Mortality Rate per Country", y="Rate", x = "Country") +
+  coord_flip()
+```
+
+From this plot, we can see the top 20 countries that reached the highest mortality rates having at least 100 confirmed COVID cases. We can see that Europe has the most countries appearing in the top 20, having 9 countries that appear. We can see a steep drop off from the top 3 countries (Yemen, France, United Kingdom) from the rest, with the top 3 reaching peak mortality rates of above 20%. Several considerations should be made when interpreting this data. Differing reporting methods, healthcare capabilities, and affects relative to the population could all affect this data and influence the reporting of these numbers. While we can draw conclusions of how countries were impacted by COVID relative to each other on this scale, further analysis should be done to truly understand how these countries were affected compared to each other.
+
+## Data Modeling
+
+```{r data_modeling}
+country_daily <- global %>%
+  filter(cases >= 100, deaths >= 0, Country_Region != "US") %>%
+  group_by(Country_Region, date) %>%
+  summarize(
+    daily_cases = sum(cases),
+    daily_deaths = sum(deaths),
+  ) %>%
+  mutate(
+    mortality_rate = round(daily_deaths/daily_cases, 3)
+  )
+
+country_monthly <- country_daily %>%
+  filter(day(date) == 1, mortality_rate < 1)
+
+country_matrix <- country_monthly %>%
+  select(Country_Region, date, mortality_rate) %>%
+  pivot_wider(
+    names_from = date,
+    values_from = mortality_rate
+  ) %>%
+  #Imputation to handle Nulls for KMeans Modeling
+  rowwise() %>%
+  mutate(
+    country_mean = mean(c_across(where(is.numeric)), na.rm=TRUE),
+    across(where(is.numeric), ~ifelse(is.na(.x), country_mean, .x)
+  )
+  ) %>%
+  ungroup () %>%
+  select(-country_mean)
+
+
+X <- country_matrix %>%
+  select(-Country_Region) %>%
+  as.matrix()
+
+X_scale = scale(X)
+```
+
+```{r}
+km <- kmeans(X_scale, centers = 5, nstart = 25)
+country_groups <- country_matrix %>%
+  select(Country_Region) %>%
+  mutate(cluster = factor(km$cluster))
+```
+
+```{r}
+pca <- prcomp(X_scale)
+clustering_df <- data.frame(
+  Country_Region = country_matrix$Country_Region[complete.cases(country_matrix %>% select(-Country_Region))],
+  PC1 = pca$x[,1],
+  PC2 = pca$x[,2],
+  Cluster = factor(km$cluster)
+)
+
+ggplot(clustering_df, aes(x=PC1, y=PC2, color = Cluster)) + 
+  geom_point() + 
+  geom_text(aes(label = ifelse(
+    Country_Region %in% c("Yemen", "United Kingdom", "France", "Spain", "Belgium", "Algeria", "Liberia", "Peru", "Mexico", "Korea, South", "China", "Japan", "Turkey", "Sudan", "Chad", "Egypt", "Argentina"), Country_Region, ""
+  ))) + 
+  labs(title = "KMeans Clustering of Countries via Mortality Rate")
+```
+
+Here I created a KMeans model to try to associate countries based off of their rolling mortality rates. I performed PCA on the data to reduce the features down to two values for the purpose of plotting the countries. With k = 5, some groups can be formed. While the labels are a bit concealed, you can see some similarities in the labeled countries in the plot above, where European countries seem to cluster around cluster 2, East Asian countries seem to cluster around cluster 1, and so on. Noticeably, Yemen, which had the highest peak mortality rate, appears as its own cluster far away from the other points, implying some sort of outlier behavior.
+
+## Bias Evaluation + Conclusion
+
+There are many possibilities for analysis and discovery regarding the COVID dataset. However, with this analysis must come a conscious effort to mitigate bias. I made assumptions about the capabilities of several countries' healthcare and reporting in my report and in doing so I may have introduced bias that I quickly noted must be explored and investigated to ensure that these assumptions are justified and ethical. My country selection when plotting the KMeans model has implicit bias, as they were chosen at my discretion. Also within the KMeans model, due to imputations, the results may have been biased involving countries with more/less reporting. When plotting the countries with the top mortality rates, it is important that it is noted that the plot is not a conclusive view of any attribute of any country, and rather and conclusion should be done with further research and context. I did my best to only visualize what the data provided, but any further conclusion, cannot be made via this report.
