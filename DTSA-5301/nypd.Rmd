@@ -1,0 +1,145 @@
+---
+title: "Shooting Project RMD"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(nnet)
+```
+
+Libraries imported: tidyverse, ggplot2, nnet
+
+## Initial Data Import
+
+The first step in the project in the analysis is to import the NYPD Shooting Incident Data. This dataset describes every recorded shooting incident from 2006 to 2024 in New York City and includes data relating to the relevant location, time, victim attributes, and perpetrator attributes. In order to import the data, we copy the link address to get the URL, and read the csv accordingly.
+
+```{r data_import, echo=TRUE}
+url_in <- "https://data.cityofnewyork.us/api/v3/views/833y-fsy8/export.csv?accessType=DOWNLOAD"
+nypd_data <- read_csv(url_in, show_col_types = FALSE)
+nypd_data
+```
+
+## Data Transformations
+
+The first step I took in tidying up the data was to look at which datatypes needed to be transformed to be better suited for analysis. The `OCCUR_DATE` column, for example, is a column of datatype `<chr>`, so I cast it to `<date>`. Several columns were the datatype `<dbl>` (`PRECINCT`, `JURISDICTION_CODE`, etc.) though they were not actually numeric columns, so I converted them into factors. I ended up determining that those columns were not necessarily additive, so I did not include them in the final selection of columns. I left a line factorizing the `JURISDICTION_CODE` in the code as an example of how the factorization would occur. The result of these transformations are below:
+
+```{r data_tidying, echo=TRUE}
+nypd <- nypd_data %>%
+  mutate(DATE = mdy(OCCUR_DATE),
+         JURISDICTION_CODE = as.factor(JURISDICTION_CODE)) %>%
+  rename(LOCATION = 'LOC_CLASSFCTN_DESC') %>%
+  select(DATE, BORO, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, 
+         VIC_AGE_GROUP, VIC_SEX, VIC_RACE)
+nypd
+```
+
+```{r, echo=TRUE}
+summary(nypd)
+```
+
+## Data Cleaning
+
+Of the selected columns, there are `(null)` values, which are being parsed as strings rather than nulls. This can be seen in the summary, in which despite these nulls existing, the minimum character counts are not 0. To remove these rows with null values, I filtered for rows that do not contain `(null)` in any `<chr>` column and nulls in any other column. Also, in the `PERP_AGE_GROUP` and `VIC_AGE_GROUP` columns, some age groups were formatted incorrectly. Due to the limited number of occurrences, I omitted these rows. The final transformed and cleaned table is below:
+
+```{r data_cleaning, echo=TRUE}
+nypd <- nypd %>%
+  filter(if_all(everything(), ~ !is.na(.)),
+         if_all(where(is.character), ~ . != "(null)"),
+         if_all(all_of(c("VIC_AGE_GROUP", "PERP_AGE_GROUP")), ~ grepl("[<+-]", .x))
+  )
+nypd
+```
+
+```{r, echo=TRUE}
+summary(nypd)
+```
+
+## Visualizations
+
+Below are two different visualizations:
+
+1.  The first visualization is a line plot or time series of the number of incidents that occurred yearly from 2006 to 2024, grouped by the Borough in which the incidents occurred.
+2.  The second visualization shows the distribution of victim age groups, grouped by perpetrator age groups.
+
+```{r time_series, echo=TRUE}
+date_count <- nypd %>%
+  group_by(year = floor_date(DATE, "year"), BORO) %>%
+  summarise(count = n())
+
+ggplot(date_count, aes(x=year, y=count)) + 
+  geom_line(aes(color = BORO)) + 
+  geom_point(aes(color= BORO)) + 
+  labs(title = "Annual Crimes By Borough", y="Count", x = "Year", color="Borough")
+
+```
+
+```{r age_dist, echo=TRUE}
+age_group <- nypd %>%
+  group_by(PERP_AGE_GROUP, VIC_AGE_GROUP) %>%
+  summarise(count = n())
+
+
+ggplot(age_group, aes(x = PERP_AGE_GROUP, y = count, fill = VIC_AGE_GROUP)) + 
+  geom_col(position = "stack") + 
+  labs(title = "Perpretrator vs Victim Age Group Distributions", y="Count", x = "Perp Age Group", fill="Vic Age Group")
+```
+
+```{r age_dist_2, echo=FALSE}
+ggplot(age_group, aes(x = VIC_AGE_GROUP, y = count, fill = PERP_AGE_GROUP)) + 
+  geom_col(position = "stack") + 
+  labs(title = "Victim vs Perpetrator Age Group Distributions", y="Count", x = "Vic Age Group", fill="Perp Age Group")
+```
+
+## Analysis
+
+1.  In analyzing the results from the first visualization, we can see some noticeable trends. We can see that for all boroughs, up until 2018-19, the overall number of incidents were decreasing over time since 2006 and rises quickly after the 2018-19 turn. In terms of total incidents, Brooklyn seems to have more incidents over the years compared to the other boroughs except for the Bronx starting in 2021. When observing these points of interest, this does raise questions not explored in this project. Without population data, we do not know actually if these total counts are significant relative to the borough. For example, Staten Island is a very small borough, so total incidents may be low, while the rate of incidents with regards to the population size could be very high. Another question to ask is why there was a large increase in incidents. Was this perhaps a shift in incident reporting/police policy? What other external factors could promote more incidents? As a purely speculative thought, how did COVID play a role in instigating events?
+2.  Regarding the perpetrator vs. victim age group visualization, there are some observations that we can easily make. It seems the primary age groups involved lie in the young adult age groups. We can see very few incidents occurring among those in the 65+ age group, while there is a non-negligible amount of incidents that involved those in the \<18 group. Some follow up questions I would like to explore next is how other demographics can relate to this particular visualization - how age, sex, race, and other factors could interact with each other and be related in some way or not. I would also like to explore the nature of these incidents. The dataset does have a `STATISTICAL_MURDER_FLAG` column, but alongside manslaughter there are multiple tiers of the severity of murder, so understanding how and why these incidents occurred especially between differing age groups would be an avenue I would like to explore with further data.
+
+## Model
+
+In terms of a model I wanted to develop, I wanted to predict the probabilities that a victim would fall into a particular age group, given the perpetrator's age.
+
+```{r model, echo=TRUE}
+#cleaning for model
+age_groups <- c("<18", "18-24", "25-44", "45-64", "65+")
+nypd$VIC_AGE_GROUP <- factor(nypd$VIC_AGE_GROUP, levels = age_groups)
+nypd$PERP_AGE_GROUP <- factor(nypd$PERP_AGE_GROUP, levels = age_groups)
+
+train_idx = sample(seq_len(nrow(nypd)),
+                   size = .8*nrow(nypd)
+                   )
+
+train <- nypd[train_idx, ]
+test <- nypd[-train_idx, ]
+
+lmod <- multinom(
+  VIC_AGE_GROUP ~ PERP_AGE_GROUP,
+  data = train
+)
+
+predict_test <- predict(lmod, newdata = test)
+
+predict_probs <- predict(lmod,
+  newdata = test,
+  type = "probs"
+)
+
+df_prob <- as.data.frame(predict_probs)
+
+df_prob$perp_age <- test$PERP_AGE_GROUP
+
+df_prob <- df_prob[!apply(is.na(df_prob), 1, any), ]
+
+head(df_prob[, c("perp_age", "<18", "18-24", "25-44", "45-64", "65+")])
+```
+
+The above table shows the predict probabilities per age group for the first five perpetrators' age groups. We can see in this very simple model which victim age group the model would most likely predict only given the perpetrator's age group. For example if the perpetrator was in the age group 25-44, the victim would be predicted to be in the 25-44 age group with a probability of .60.
+
+## Conclusion
+
+The NYPD Shooting Incident Data set contains a plethora of information that allows for several avenues of potential investigation and exploration of the data to occur. While I explored two features - location and age, several other features were left unexplored in my analysis and are potentially valuable assets that could lead to further insights. However, one must be extremely cautious to acknowledge bias especially regarding data that has features that could have sociopolitical impact if handled incorrectly. This report could have biases from several sources. Perhaps the filing of the incident was biased in terms of reporting the severity or determination of cause. Or maybe there may be an increased police presence in certain areas, leading to that area having less incidents or other areas having more. These are just potential scenarios that could have introduced bias into this report. In terms of personal bias, I certainly had some feelings towards some of the findings within the age group exploration. I made sure to check my thoughts and remind myself that I should remain impartial and ensure that findings are presented without any connotation. I may have some personal biases regarding other demographic information and it is my duty that I do my duty that when exploring and presenting this data, I understand the contexts, consequences, and purposes of the data so that my analysis is done ethically.
