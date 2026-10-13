@@ -3,8 +3,8 @@ title: "COVID Report"
 author: "Kevin Park"
 date: "2026-10-01"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -270,4 +270,4 @@ Here I created a KMeans model to try to associate countries based off of their r
 
 ## Bias Evaluation + Conclusion
 
-There are many possibilities for analysis and discovery regarding the COVID dataset. However, with this analysis must come a conscious effort to mitigate bias. I made assumptions about the capabilities of several countries' healthcare and reporting in my report and in doing so I may have introduced bias that I quickly noted must be explored and investigated to ensure that these assumptions are justified and ethical. My country selection when plotting the KMeans model has implicit bias, as they were chosen at my discretion. Also within the KMeans model, due to imputations, the results may have been biased involving countries with more/less reporting. When plotting the countries with the top mortality rates, it is important that it is noted that the plot is not a conclusive view of any attribute of any country, and rather and conclusion should be done with further research and context. I did my best to only visualize what the data provided, but any further conclusion, cannot be made via this report.
+There are many possibilities for analysis and discovery regarding the COVID dataset. In my analysis, I focused on exploring mortality rate and the comparisons between countries. I was able to uncover some similarity when comparing the US and global mortality rates over time and was able to cluster countries based off of how similar their mortality rates trended over time. Mortality rate is just one avenue to pursue with this data, and I am eager to explore further and draw more insights. However, with this analysis must come a conscious effort to mitigate bias. I made assumptions about the capabilities of several countries' healthcare and reporting in my report and in doing so I may have introduced bias that I quickly noted must be explored and investigated to ensure that these assumptions are justified and ethical. My country selection when plotting the KMeans model has implicit bias, as they were chosen at my discretion. Also within the KMeans model, due to imputations, the results may have been biased involving countries with more/less reporting. When plotting the countries with the top mortality rates, it is important that it is noted that the plot is not a conclusive view of any attribute of any country, and rather and conclusion should be done with further research and context. I did my best to only visualize what the data provided, but any further conclusion, cannot be made via this report.
