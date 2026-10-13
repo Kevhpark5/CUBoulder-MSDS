@@ -18,6 +18,14 @@ library(zoo)
 
 Libraries used: tidyverse, ggplot2, lubridate, readr, zoo
 
+## Question of Interest
+
+In this project, I want to explore the mortality rate of COVID19 and particularly compare the mortality rate between countries. Given the presence of a US specific dataset and global dataset, I want to know was there a difference in mortality rate trends over time between the US and the rest of the world? I also would like to explore other avenues where mortality rate can be compared across countries.
+
+## Data Description
+
+The data comes from the COVID19 dataset form the Johns Hopkins Github site. It is composed of four different data sets - two specific to the US and two that contain global information. They contain both the number of daily cases specific to the state/region as well as the number of daily deaths along with other geographical features.
+
 ## Data Import
 
 The first step in the project is to import the data. This step is a reproduction of what was presented in lecture.
@@ -114,7 +122,7 @@ summary(US)
 
 ## Data Visualizations and Analyses
 
-### Visualization 1
+### Visualization + Analysis 1
 
 For the first visualization of the project, I want to take a look at the mortality rates over time and analyze the results for the global data vs. the US data. The goal is to try to determine any noticeable differences and similarities between the two datasets and draw meaningful insights from them.
 
@@ -172,7 +180,7 @@ Note: I chose to only plot the rolling values as of the first of the month, as t
 
 As we can see in the visualization, the US follows the global trend fairly closely with the mortality rate spiking in mid-2020 then tapering off and slowly declining over time. A plausible explanation would be that the US was no exception towards the global exposure to COVID and was susceptible to the same outcomes as the rest of the world. We can also see that the overall mortality rate was lower in general for the US vs. globally. This could be caused by several potential phenomena. One potential reason could be that the US may have more advanced medical technology than the global average, thus being more apt in reducing the mortality rate. Another potential reason could be the method reporting cases/deaths. Perhaps the US had more avenues to report a positive COVID test, regardless of severity whereas other counties around the globe may only report serious cases, which have a higher likelihood of death. These potential explanations would require further investigation out of the context of this course to ensure that these assumptions are justified and are ethically sound.
 
-### Visualization 2
+### Visualization + Analysis 2
 
 For the second visualization, I wanted to identify the countries with the highest peak mortality rates recorded. For the sake of achieving a sufficient sample size, I only accounted for rates once the number of cases reached at least 100.
 
